@@ -1,10 +1,10 @@
 {
-  "name": "ai-usage-estimate",
+  "name": "prompt-cost-preview",
   "description": "Actual-vs-estimated Claude Code session cost, cost feedback before a prompt or plan runs, and optional retraining on your own session data — all via a local heuristic/neural token-cost model. No network calls, no data leaves your machine.",
   "version": "0.1.0",
   "author": { "name": "Gourav Diwan", "email": "gourav.diwan@gmail.com" },
-  "homepage": "https://github.com/Gourav-Diwan/ai-usage-estimate",
-  "repository": "https://github.com/Gourav-Diwan/ai-usage-estimate",
+  "homepage": "https://github.com/Gourav-Diwan/prompt-cost-preview",
+  "repository": "https://github.com/Gourav-Diwan/prompt-cost-preview",
   "license": "MIT",
   "keywords": ["usage", "cost", "budget", "tokens", "estimate", "retrain"],
   "hooks": {

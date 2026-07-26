@@ -1,4 +1,4 @@
-# AI Usage Estimate
+# Prompt Cost Preview
 
 A Claude Code plugin that estimates the token/dollar cost of your prompts
 and plans before they run, compares actual-vs-estimated cost for the
@@ -23,8 +23,8 @@ locally against your own `~/.claude/projects/**` transcripts.
 ## Install
 
 ```
-/plugin marketplace add Gourav-Diwan/ai-usage-estimate
-/plugin install ai-usage-estimate@ai-usage-estimate
+/plugin marketplace add Gourav-Diwan/prompt-cost-preview
+/plugin install prompt-cost-preview@prompt-cost-preview
 ```
 
 ## Usage
