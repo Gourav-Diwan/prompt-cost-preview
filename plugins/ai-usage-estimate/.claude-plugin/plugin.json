@@ -1,0 +1,27 @@
+{
+  "name": "ai-usage-estimate",
+  "description": "Actual-vs-estimated Claude Code session cost, cost feedback before a prompt or plan runs, and optional retraining on your own session data — all via a local heuristic/neural token-cost model. No network calls, no data leaves your machine.",
+  "version": "0.1.0",
+  "author": { "name": "Gourav Diwan", "email": "gourav.diwan@gmail.com" },
+  "homepage": "https://github.com/Gourav-Diwan/ai-usage-estimate",
+  "repository": "https://github.com/Gourav-Diwan/ai-usage-estimate",
+  "license": "MIT",
+  "keywords": ["usage", "cost", "budget", "tokens", "estimate", "retrain"],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/plan-cost-estimate.cjs\"" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/prompt-cost-estimate.cjs\"" }
+        ]
+      }
+    ]
+  }
+}

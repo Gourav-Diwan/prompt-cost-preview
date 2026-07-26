@@ -1,0 +1,14 @@
+{
+  "name": "ai-usage-estimate",
+  "owner": {
+    "name": "Gourav Diwan",
+    "email": "gourav.diwan@gmail.com",
+    "url": "https://github.com/Gourav-Diwan"
+  },
+  "metadata": {
+    "description": "Estimate Claude Code prompt/plan/session cost before and after it runs, using a local heuristic/neural token-cost model you can retrain on your own usage."
+  },
+  "plugins": [
+    { "name": "ai-usage-estimate", "source": "./plugins/ai-usage-estimate", "category": "productivity" }
+  ]
+}
