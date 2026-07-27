@@ -14,8 +14,14 @@ locally against your own `~/.claude/projects/**` transcripts.
   session, plus a styled shareable report card.
 - **Cost feedback before you run something** — a message shows the
   estimated cost right before Plan Mode's approve/reject prompt, and
-  again (for longer prompts) right as you submit a regular message. Both
-  are informational only — they never block or erase what you typed.
+  again (for longer prompts) right as you submit a regular message.
+  Plan Mode's estimate is always informational only. The regular-prompt
+  estimate is informational too, *unless* its high-end cost estimate is
+  above `CLAUDE_CODE_PROMPT_COST_CONFIRM_THRESHOLD` (default `$0.50`) — in
+  that case the prompt is blocked with the estimate shown as the reason,
+  and you resend the exact same prompt within 5 minutes to confirm and let
+  it proceed. (`UserPromptSubmit` hooks can't pause and wait for a
+  yes/no click, so a literal resend is the confirmation gesture.)
 - **`retrain` skill** — mines every Claude Code session on this machine,
   trains a personalized copy of the cost model on it, and every other
   part of this plugin picks it up automatically afterward.

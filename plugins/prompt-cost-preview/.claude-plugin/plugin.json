@@ -12,14 +12,14 @@
       {
         "matcher": "ExitPlanMode",
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/plan-cost-estimate.cjs\"" }
+          { "type": "command", "command": "CLAUDE_PLUGIN_DATA=\"${CLAUDE_PLUGIN_DATA}\" node \"${CLAUDE_PLUGIN_ROOT}/scripts/plan-cost-estimate.cjs\"" }
         ]
       }
     ],
     "UserPromptSubmit": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/prompt-cost-estimate.cjs\"" }
+          { "type": "command", "command": "CLAUDE_PLUGIN_DATA=\"${CLAUDE_PLUGIN_DATA}\" node \"${CLAUDE_PLUGIN_ROOT}/scripts/prompt-cost-estimate.cjs\"" }
         ]
       }
     ]
