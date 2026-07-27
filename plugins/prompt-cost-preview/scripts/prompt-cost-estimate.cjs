@@ -25,6 +25,11 @@
 // beforeSubmitPrompt gate, extension-cursor/cursor-hooks/
 // before-submit-prompt.cjs) still holds for everything under threshold.
 //
+// The hash/threshold/state-file/block-or-confirm logic itself now lives in
+// lib/confirm-gate.cjs, shared with command-cost-estimate.cjs
+// (UserPromptExpansion, gates slash commands the same way) — not
+// duplicated here.
+//
 // Deliberately fails silently (prints nothing / an empty object) on any
 // error — a broken estimate must never block normal prompt submission.
 //
@@ -32,11 +37,7 @@
 // confirmed via the Claude Code hooks reference before writing this parser
 // — not guessed.
 
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-
-const CONFIRM_WINDOW_MS = 5 * 60 * 1000;
+const { confirmGate } = require('./lib/confirm-gate.cjs');
 
 function fmtTokens(n) {
   if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
@@ -46,35 +47,6 @@ function fmtTokens(n) {
 
 function fmtCost(n) {
   return '$' + n.toFixed(n < 0.01 ? 4 : 2);
-}
-
-// Reads/prunes/writes the pending-confirmation map. Never throws — a
-// corrupt or unwritable state file must degrade to "no confirmations
-// pending" (i.e. the next expensive prompt just re-blocks), never crash the
-// hook or wedge prompt submission.
-function loadPendingConfirmations(dataDir) {
-  const file = path.join(dataDir, 'pending-cost-confirmations.json');
-  let map = {};
-  try {
-    map = JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    map = {};
-  }
-  const now = Date.now();
-  for (const hash of Object.keys(map)) {
-    if (typeof map[hash] !== 'number' || now - map[hash] > CONFIRM_WINDOW_MS) delete map[hash];
-  }
-  return { file, map };
-}
-
-function savePendingConfirmations(file, map) {
-  try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(map));
-  } catch {
-    // Can't persist the confirmation — the resend will just block again
-    // next time, which is the safe direction to fail in.
-  }
 }
 
 function main(stdinText) {
@@ -108,31 +80,15 @@ function main(stdinText) {
   const threshold = parseFloat(process.env.CLAUDE_CODE_PROMPT_COST_CONFIRM_THRESHOLD || '0.50');
   const dataDir = process.env.CLAUDE_PLUGIN_DATA;
 
-  if (dataDir && Number.isFinite(threshold) && est.costHigh > threshold) {
-    const hash = crypto.createHash('sha256').update(text).digest('hex');
-    const { file, map } = loadPendingConfirmations(dataDir);
-
-    if (map[hash]) {
-      // A confirmed resend of the exact same prompt within the window —
-      // single-use, so it can't be replayed again after this.
-      delete map[hash];
-      savePendingConfirmations(file, map);
-      process.stdout.write(JSON.stringify({ systemMessage: `✅ Confirmed — proceeding. ${estimateLine}` }));
-      return;
-    }
-
-    map[hash] = Date.now();
-    savePendingConfirmations(file, map);
-    process.stdout.write(JSON.stringify({
-      decision: 'block',
-      reason:
-        `📊 ${estimateLine} This is above your $${threshold.toFixed(2)} confirm threshold. ` +
-        `Resend this exact same prompt within 5 minutes to confirm and proceed.`,
-    }));
-    return;
-  }
-
-  process.stdout.write(JSON.stringify({ systemMessage: `📊 ${estimateLine}` }));
+  const result = confirmGate({
+    textToHash: text,
+    estimateLine,
+    costHigh: est.costHigh,
+    threshold,
+    dataDir,
+    subjectLabel: 'prompt',
+  });
+  process.stdout.write(JSON.stringify(result));
 }
 
 let stdinText = '';

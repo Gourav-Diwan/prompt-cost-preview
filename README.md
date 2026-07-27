@@ -22,6 +22,16 @@ locally against your own `~/.claude/projects/**` transcripts.
   and you resend the exact same prompt within 5 minutes to confirm and let
   it proceed. (`UserPromptSubmit` hooks can't pause and wait for a
   yes/no click, so a literal resend is the confirmation gesture.)
+- **The same gate applies to slash commands** (`/name` or `/plugin:name`),
+  not just typed prompts — estimated against the command's own instruction
+  file, same `$0.50` threshold and resend-to-confirm mechanic. This only
+  works for commands whose source file this plugin can actually locate on
+  disk (installed-plugin `skills/`/`commands/` layouts, and project-/
+  user-level `.claude/skills/`/`.claude/commands/`); a command from a
+  source or layout this plugin doesn't recognize is estimated as "no data"
+  and passes through ungated, same as anything under threshold. This
+  plugin's own `usage-estimate`/`retrain` commands are exempt from their
+  own gate.
 - **`retrain` skill** — mines every Claude Code session on this machine,
   trains a personalized copy of the cost model on it, and every other
   part of this plugin picks it up automatically afterward.
@@ -48,4 +58,7 @@ locally against your own `~/.claude/projects/**` transcripts.
 This plugin never makes a network request and never uploads anything.
 The `retrain` skill reads your local `~/.claude/projects/**/*.jsonl`
 transcripts and writes a personalized model file to this plugin's own
-persistent data directory — nothing leaves your machine at any point.
+persistent data directory — nothing leaves your machine at any point. The
+slash-command gate reads local command/skill markdown files (not just
+prompt text and transcripts) to estimate their cost — still local-only,
+just a wider local-read surface than the prompt gate alone.
