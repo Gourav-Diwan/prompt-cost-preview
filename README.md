@@ -35,6 +35,14 @@ locally against your own `~/.claude/projects/**` transcripts.
 - **`retrain` skill** — mines every Claude Code session on this machine,
   trains a personalized copy of the cost model on it, and every other
   part of this plugin picks it up automatically afterward.
+- **`hook-activity` skill** — since informational (non-blocking) cost
+  messages render with zero visible UI feedback in some Claude Code
+  hosts, this reviews the whole session at once: every blocked,
+  confirmed, and informational gate message across prompts/commands/
+  plans, plus a "no gate record" list for anything the gates never saw
+  at all (e.g. a host-bundled skill this plugin can't locate on disk) —
+  a styled report card, same shareable-Artifact pattern as
+  `usage-estimate`.
 
 ## Install
 
