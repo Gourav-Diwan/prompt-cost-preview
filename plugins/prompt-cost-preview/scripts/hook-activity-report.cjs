@@ -49,12 +49,24 @@
 // a "command" no-record item's reason as a hint to check the "prompt"
 // timeline for the same timestamp, not a guaranteed gap.
 //
+// For "no gate record" prompts (4+ words) and resolvable commands, this
+// script ALSO re-estimates the cost right now via the same estimator the
+// real hooks use, and reports whether it would cross the confirm
+// threshold — a would-block item is a genuine anomaly worth investigating
+// (the gate should have caught it), while an under-threshold one is
+// expected and harmless (it was never going to gate anything, just
+// invisible in this host's UI same as every other informational message).
+// This uses CURRENT model/threshold/weights config, not necessarily what
+// was active when the event actually happened — a live re-check, not a
+// historical record.
+//
 // Usage: node hook-activity-report.cjs [--cwd <path>] [--json] [--html <path>]
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { resolveCommandContent } = require('./lib/resolve-command-content.cjs');
+const loadGlobals = require('./lib/load-globals.cjs');
 
 const CONFIRM_WINDOW_MS = 5 * 60 * 1000; // duplicated from scripts/lib/confirm-gate.cjs's CONFIRM_WINDOW_MS — this script never requires that module, since everything needed here already lives in the transcript itself.
 const RAW_EVENT_MATCH_WINDOW_MS = 2000; // hook records land within ~1s of their triggering event in practice; generous margin.
@@ -243,12 +255,20 @@ function parseSession(file, cwd) {
 function classify(hookRecords, rawEvents, cwd) {
   const timeline = [];
   const summary = {
-    prompt: { blocked: 0, confirmed: 0, pending: 0, abandoned: 0, superseded: 0, informational: 0, noRecord: 0 },
-    command: { blocked: 0, confirmed: 0, pending: 0, abandoned: 0, superseded: 0, informational: 0, noRecord: 0 },
+    prompt: { blocked: 0, confirmed: 0, pending: 0, abandoned: 0, superseded: 0, informational: 0, noRecord: 0, noRecordWouldBlock: 0, noRecordUnderThreshold: 0 },
+    command: { blocked: 0, confirmed: 0, pending: 0, abandoned: 0, superseded: 0, informational: 0, noRecord: 0, noRecordWouldBlock: 0, noRecordUnderThreshold: 0 },
     plan: { informational: 0, noRecord: 0 },
   };
   const now = Date.now();
   const claimedConfirms = new Set();
+
+  // Same estimator/config the real hooks use — loaded once, reused for
+  // every no-record re-estimate below. Loading is cheap (a vm-loaded
+  // local model, no network), so unconditional is simpler than lazy-init
+  // for the common case where at least one no-record item needs it.
+  const g = loadGlobals({ withWeights: true });
+  const modelKey = process.env.CLAUDE_CODE_PLAN_ESTIMATE_MODEL || 'sonnet';
+  const threshold = parseFloat(process.env.CLAUDE_CODE_PROMPT_COST_CONFIRM_THRESHOLD || '0.50');
 
   // Plain informational (not blocked, not confirmed) — prompt/command, and
   // all plan records (plans never block).
@@ -331,27 +351,50 @@ function classify(hookRecords, rawEvents, cwd) {
     if (ev.kind === 'prompt') {
       if (hasNearbyRecord('prompt', ev.timestamp)) continue;
       const wordCount = ev.text.split(/\s+/).filter(Boolean).length;
-      const reason = wordCount < 4 ? 'too short — skipped by design' : 'no explanation found — possible gate failure';
+      let reason, wouldExceedThreshold = null, estCostHigh = null;
+      if (wordCount < 4) {
+        reason = 'too short — skipped by design';
+      } else {
+        const est = g.estimateTask(ev.text, modelKey, { agentic: true });
+        wouldExceedThreshold = est.costHigh > threshold;
+        estCostHigh = est.costHigh;
+        reason = wouldExceedThreshold
+          ? `re-estimating now: $${est.costHigh.toFixed(2)} exceeds the $${threshold.toFixed(2)} threshold — the gate should have blocked this, worth investigating`
+          : `re-estimating now: $${est.costHigh.toFixed(2)} is under the $${threshold.toFixed(2)} threshold — correctly informational-only, likely just invisible in this host's UI`;
+      }
       summary.prompt.noRecord++;
+      if (wouldExceedThreshold === true) summary.prompt.noRecordWouldBlock++;
+      if (wouldExceedThreshold === false) summary.prompt.noRecordUnderThreshold++;
       timeline.push({ kind: 'no-record', category: 'prompt', timestamp: ev.timestamp,
-        textPreview: truncate(ev.text, 140), reason });
+        textPreview: truncate(ev.text, 140), reason, wouldExceedThreshold, estCostHigh });
       continue;
     }
     if (ev.kind === 'command') {
       if (hasNearbyRecord('command', ev.timestamp)) continue;
-      let reason, resolvesToday = null;
+      let reason, resolvesToday = null, wouldExceedThreshold = null, estCostHigh = null;
       if (ev.commandName.startsWith('prompt-cost-preview:')) {
         reason = 'exempt by design (this plugin’s own commands)';
       } else {
         const content = resolveCommandContent({ command_name: ev.commandName, cwd: ev.cwd || cwd });
         resolvesToday = content != null;
-        reason = resolvesToday
-          ? 'resolvable now, but had no hook record this session — possible transient gate failure'
-          : 'not resolvable today (host-bundled or missing source)';
+        if (resolvesToday) {
+          const text = (content + (ev.commandArgs ? '\n' + ev.commandArgs : '')).trim();
+          const est = g.estimateTask(text, modelKey, { agentic: true });
+          wouldExceedThreshold = est.costHigh > threshold;
+          estCostHigh = est.costHigh;
+          reason = wouldExceedThreshold
+            ? `re-estimating now: $${est.costHigh.toFixed(2)} exceeds the $${threshold.toFixed(2)} threshold — the gate should have blocked this, worth investigating`
+            : `re-estimating now: $${est.costHigh.toFixed(2)} is under the $${threshold.toFixed(2)} threshold — correctly informational-only, likely just invisible in this host's UI`;
+        } else {
+          reason = 'not resolvable today (host-bundled or missing source)';
+        }
       }
       summary.command.noRecord++;
+      if (wouldExceedThreshold === true) summary.command.noRecordWouldBlock++;
+      if (wouldExceedThreshold === false) summary.command.noRecordUnderThreshold++;
       timeline.push({ kind: 'no-record', category: 'command', timestamp: ev.timestamp,
-        commandName: ev.commandName, resolvesToday, textPreview: truncate(ev.commandArgs, 140), reason });
+        commandName: ev.commandName, resolvesToday, wouldExceedThreshold, estCostHigh,
+        textPreview: truncate(ev.commandArgs, 140), reason });
     }
   }
 
@@ -370,19 +413,25 @@ function printConsole(reportData) {
   console.log(bold('Hook Activity'));
   console.log(dim(`Session ${reportData.sessionId}`));
   console.log('');
+  const SUB_KEYS = new Set(['noRecordWouldBlock', 'noRecordUnderThreshold']);
   for (const cat of ['prompt', 'command', 'plan']) {
     const s = reportData.summary[cat];
-    const parts = Object.entries(s).filter(([, v]) => v > 0).map(([k, v]) => `${k}: ${v}`);
+    const parts = Object.entries(s).filter(([k, v]) => v > 0 && !SUB_KEYS.has(k)).map(([k, v]) => {
+      if (k === 'noRecord' && (s.noRecordWouldBlock || s.noRecordUnderThreshold)) {
+        return `${k}: ${v} (${s.noRecordWouldBlock} would-block, ${s.noRecordUnderThreshold} under-threshold)`;
+      }
+      return `${k}: ${v}`;
+    });
     console.log(bold(cat.charAt(0).toUpperCase() + cat.slice(1) + 's') + '  ' + (parts.length ? parts.join(', ') : dim('none')));
   }
   console.log('');
 
-  const needsAttention = reportData.timeline.filter((t) => t.outcome === 'pending' || t.outcome === 'abandoned');
+  const needsAttention = reportData.timeline.filter((t) => t.outcome === 'pending' || t.outcome === 'abandoned' || t.wouldExceedThreshold === true);
   if (needsAttention.length) {
     console.log(bold('Needs attention'));
     for (const t of needsAttention) {
-      const label = t.outcome === 'pending' ? yellow('PENDING') : red('ABANDONED');
-      console.log(`  ${label}  [${t.category}]  ${t.timestamp}  ${t.textPreview}`);
+      const label = t.wouldExceedThreshold === true ? red('WOULD BLOCK') : t.outcome === 'pending' ? yellow('PENDING') : red('ABANDONED');
+      console.log(`  ${label}  [${t.category}]  ${t.timestamp}  ${t.commandName || t.textPreview}`);
     }
     console.log('');
   }
@@ -406,7 +455,11 @@ function escapeHtml(s) {
 }
 
 function chipFor(item) {
-  if (item.kind === 'no-record') return { cls: 'chip-norecord', label: 'NO RECORD' };
+  if (item.kind === 'no-record') {
+    if (item.wouldExceedThreshold === true) return { cls: 'chip-bad', label: 'NO RECORD · WOULD BLOCK' };
+    if (item.wouldExceedThreshold === false) return { cls: 'chip-norecord', label: 'NO RECORD · OK' };
+    return { cls: 'chip-norecord', label: 'NO RECORD' };
+  }
   if (item.kind === 'blocked') {
     if (item.outcome === 'confirmed') return { cls: 'chip-good', label: 'CONFIRMED' };
     if (item.outcome === 'pending') return { cls: 'chip-warn', label: 'PENDING' };
@@ -425,9 +478,14 @@ function renderHtml(reportData) {
     return `<div class="event"><span class="chip ${chip.cls}">${chip.label}</span><div class="event-body"><div class="event-cat">${escapeHtml(t.category)} &middot; ${escapeHtml(t.timestamp)}</div><div class="event-label">${label}</div><div class="event-numbers">${numbers}</div></div></div>`;
   }).join('\n');
 
+  const SUB_KEYS = new Set(['noRecordWouldBlock', 'noRecordUnderThreshold']);
   const statCells = ['prompt', 'command', 'plan'].map((cat) => {
     const s = reportData.summary[cat];
-    const parts = Object.entries(s).filter(([, v]) => v > 0).map(([k, v]) => `${k}: <span class="num">${v}</span>`).join(' &middot; ');
+    const parts = Object.entries(s).filter(([k, v]) => v > 0 && !SUB_KEYS.has(k)).map(([k, v]) => {
+      const suffix = (k === 'noRecord' && (s.noRecordWouldBlock || s.noRecordUnderThreshold))
+        ? ` (${s.noRecordWouldBlock} would-block, ${s.noRecordUnderThreshold} under)` : '';
+      return `${k}: <span class="num">${v}</span>${suffix}`;
+    }).join(' &middot; ');
     return `<div class="stat"><span class="stat-label">${cat}s</span><span class="stat-value">${parts || '<span class="dim">none</span>'}</span></div>`;
   }).join('\n');
 

@@ -41,8 +41,11 @@ locally against your own `~/.claude/projects/**` transcripts.
   confirmed, and informational gate message across prompts/commands/
   plans, plus a "no gate record" list for anything the gates never saw
   at all (e.g. a host-bundled skill this plugin can't locate on disk) —
-  a styled report card, same shareable-Artifact pattern as
-  `usage-estimate`.
+  each no-record item is also re-estimated live against the real
+  threshold, so it's flagged as a genuine "would block" anomaly worth
+  investigating versus a harmless "under threshold, just invisible in
+  this host's UI" case. All of it renders as a styled report card, same
+  shareable-Artifact pattern as `usage-estimate`.
 
 ## Install
 
