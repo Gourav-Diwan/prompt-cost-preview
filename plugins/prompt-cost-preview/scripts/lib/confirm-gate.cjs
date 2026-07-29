@@ -60,11 +60,19 @@ function confirmGate({ textToHash, estimateLine, costHigh, threshold, dataDir, s
 
       map[hash] = Date.now();
       savePendingConfirmations(file, map);
+      // Spelled out as three explicit choices (not one run-on sentence) —
+      // confirmed via user feedback that the original single-sentence
+      // wording read as a dead end with no visible next step. The full
+      // reason text is always shown in this host's "blocked by hook"
+      // panel, so it doubles as the "view details" the user asked to keep
+      // — no separate detail view needed.
       return {
         decision: 'block',
         reason:
-          `📊 ${estimateLine} This is above your $${threshold.toFixed(2)} confirm threshold. ` +
-          `Resend this exact same ${subjectLabel} within 5 minutes to confirm and proceed.`,
+          `📊 ${estimateLine} This is above your $${threshold.toFixed(2)} confirm threshold.\n\n` +
+          `• Proceed — resend this exact same ${subjectLabel} within 5 minutes to confirm and run it as-is.\n` +
+          `• Abandon — do nothing; send something else and this ${subjectLabel} is dropped.\n` +
+          `• Edit/New — revise this ${subjectLabel} to a smaller scope, then send the edited version (it gets its own fresh estimate).`,
       };
     }
 

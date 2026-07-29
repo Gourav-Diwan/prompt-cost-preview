@@ -100,8 +100,8 @@ function findCurrentSessionFile(cwd) {
 // separately below), so the list is copied here minus that one entry.
 const SYNTHETIC_PREFIXES = [
   '<ide_opened_file>', '<ide_selection>', '<command-message>',
-  '<local-command-stdout', '<system-reminder>', '<task-notes>', 'Caveat:',
-  '[Request interrupted',
+  '<local-command-stdout', '<system-reminder>', '<task-notes>', '<task-notification>',
+  'Caveat:', '[Request interrupted',
   "Run the current Claude Code session's actual-vs-estimated cost report",
   'Base directory for this skill:', // command-body expansion text — see the timestamp-based filter below for the primary defense
 ];

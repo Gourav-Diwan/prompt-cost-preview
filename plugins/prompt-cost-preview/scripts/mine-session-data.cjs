@@ -77,10 +77,16 @@ function pricing(modelId) {
 }
 
 // Markers for non-human "user" messages injected by the harness/IDE.
+// <task-notification> added after a live bug: a claude-desktop background-
+// agent completion gets delivered through the SAME channel as a real typed
+// prompt, with no distinguishing field — prompt-cost-estimate.cjs was
+// gating it as if the user had typed a huge dumped agent result. Fixed
+// there too; kept here in sync so mined training data isn't contaminated
+// by the same thing.
 const SYNTHETIC_PREFIXES = [
   '<ide_opened_file>', '<ide_selection>', '<command-name>', '<command-message>',
-  '<local-command-stdout', '<system-reminder>', '<task-notes>', 'Caveat:',
-  '[Request interrupted',
+  '<local-command-stdout', '<system-reminder>', '<task-notes>', '<task-notification>',
+  'Caveat:', '[Request interrupted',
   // /usage-estimate's own instruction preamble (~/.claude/commands/usage-estimate.md)
   // — its `!`-substituted bash output gets inlined into the SAME message as
   // this text, with no wrapping tag, so without this exact-string check it's

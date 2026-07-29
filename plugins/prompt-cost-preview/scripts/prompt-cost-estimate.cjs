@@ -36,6 +36,28 @@
 // stdin payload's exact field carrying the prompt text ("prompt") was
 // confirmed via the Claude Code hooks reference before writing this parser
 // — not guessed.
+//
+// REAL BUG FOUND AND FIXED (live, in a `claude-desktop` session): Claude
+// Code delivers system-generated events — a background-agent completion
+// notification wrapped in `<task-notification>...</task-notification>`,
+// chief among them — through `UserPromptSubmit` exactly like a real typed
+// prompt, with no field distinguishing the two. Without a filter, this
+// hook gated a huge dumped agent-result as if the user had typed it,
+// blocking a turn the user never initiated and had no way to "resend"
+// (they never typed it in the first place). SYNTHETIC_PREFIXES below is
+// the same class of check `scripts/mine-session-data.cjs` already applies
+// when mining transcripts — hand-synced here, not shared, matching this
+// plugin's established per-script small-helper convention. Update all
+// copies together if a new synthetic marker turns up (this exact gap —
+// `<task-notification>` being new and present in NONE of the existing
+// copies — is how this bug happened in the first place).
+
+const SYNTHETIC_PREFIXES = [
+  '<ide_opened_file>', '<ide_selection>', '<command-name>', '<command-message>',
+  '<local-command-stdout', '<system-reminder>', '<task-notes>', '<task-notification>',
+  'Caveat:', '[Request interrupted',
+];
+const ANSI_ESCAPE = /\x1b\[[0-9;]*m/;
 
 const { confirmGate } = require('./lib/confirm-gate.cjs');
 
@@ -60,6 +82,14 @@ function main(stdinText) {
 
   const text = (payload && (payload.prompt || payload.user_prompt || '')).trim();
   if (!text) { process.stdout.write('{}'); return; }
+
+  // Not something the user typed — a background-agent notification, an
+  // IDE/system-injected block, or leaked ANSI-styled command output. Never
+  // gate these: there's nothing for the user to knowingly "resend."
+  if (SYNTHETIC_PREFIXES.some((p) => text.startsWith(p)) || ANSI_ESCAPE.test(text)) {
+    process.stdout.write('{}');
+    return;
+  }
 
   // Skip trivially short prompts (e.g. "yes", "ok", "continue") — an
   // estimate on a 2-word confirmation is noise, not signal.
